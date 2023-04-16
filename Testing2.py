@@ -22,13 +22,13 @@ ax.set_ylim(-60, 60)
 ax.grid(True)
 
 while True:
-    x = psd(samples, NFFT=1024, Fs=sdr.sample_rate/1e6, Fc=sdr.center_freq/1e6)
+    samples = sdr.read_samples(256*1024)
 
     f = np.arange(-Fs/2, Fs/2, Fs/N) # start, stop, step
 
     # update the data for the plot
     ax.clear()
-    ax.plot(f, x)
+    ax.plot(f, plt.psd(samples, NFFT=1024, Fs=sdr.sample_rate/1e6, Fc=sdr.center_freq/1e6))
     ax.set_xlabel("Frequency [Hz]")
     ax.set_ylabel("Magnitude [dB]")
     ax.set_xlim(-Fs/2, Fs/2)
