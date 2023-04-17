@@ -1,6 +1,7 @@
 import rtlsdr
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.signal import firwin, resample_poly
 
 # Define the RTL SDR module settings
 center_freq = 100e6    # Hz
@@ -17,6 +18,24 @@ sdr.gain = gain
 
 # Read samples from the RTL SDR module
 samples = sdr.read_samples(1024*1024)
+
+# Freq shift
+N = len(samples)
+f_o = -57e3 # amount we need to shift by
+t = np.arange(N)/sample_rate # time vector
+samples = samples * np.exp(2j*np.pi*f_o*t) # down shift
+
+# Low-Pass Filter
+taps = firwin(numtaps=101, cutoff=7.5e3, fs=sample_rate)
+samples = np.convolve(samples, taps, 'valid')
+
+# Decimate by 10, now that we filtered and there wont be aliasing
+samples = samples[::10]
+sample_rate = 25e3
+
+# Resample to 19kHz
+samples = resample_poly(samples, 19, 25) # up, down
+sample_rate = 19e3
 
 # Calculate the power spectral density (PSD) in dBm
 psd = 10*np.log10(np.abs(np.fft.fft(samples))**2/len(samples)*50)+30
