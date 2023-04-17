@@ -35,7 +35,8 @@ samples = resample_poly(samples, 19e3, sample_rate)
 frequencies, spectrum = plt.psd(samples, NFFT=1024, Fs=19e3, scale_by_freq=True, window=np.blackman(1024))
 
 # Convert the spectrum to dBm
-spectrum_dbm = 10 * np.log10(spectrum) + 30
+spectrum_dbm = 10 * np.log10(spectrum + 1e-12) + 30
+
 
 # Plot the spectrum
 plt.plot(frequencies/1e6, spectrum_dbm)
