@@ -1,59 +1,34 @@
-from rtlsdr import RtlSdr
-import matplotlib.pyplot as plt
+import rtlsdr
 import numpy as np
+import matplotlib.pyplot as plt
 
-sdr = RtlSdr()
+# Define the RTL SDR module settings
+center_freq = 500e6    # Hz
+sample_rate = 2.4e6    # Hz
+gain = 1              # dB
 
-print("-------------------------------")
-print("------Spectrum plotter V1------")
-print("-------------------------------")
+# Create the RTL SDR object
+sdr = rtlsdr.RtlSdr()
 
-def main():
-    global start_freq
-    global stop_freq
-    global center_freqin
-    start_freq = float(input("Enter the start frequency: "))
-    print("-------------------------------")
-    stop_freq = float(input("Enter the stop frequency: "))
-    print("-------------------------------")
-    center_freqin = float(input("Enter the center frequency: "))
-    print("-------------------------------")
-    restart()
+# Set the RTL SDR module parameters
+sdr.sample_rate = sample_rate
+sdr.center_freq = center_freq
+sdr.gain = gain
 
-def restart():
-    error = 0
-    if(start_freq > stop_freq):
-        print("The start frequency is greater than the stop frequency...")
-        error = 1
-    if(center_freqin < start_freq):
-        print("The center frequency is less than the start frequency...")
-        error = 1
-    if(center_freqin > stop_freq):
-        print("The center frequency is greater than the stop frequency...")
-        error = 1
-    if(error == 1):
-        print("Enter 1 to re-enter values or 2 to exit")
-        again = int(input())
-        if(again == 1):
-            main()
-        elif(again == 2):
-            exit()
-        else:
-            exit()
+# Read samples from the RTL SDR module
+samples = sdr.read_samples(1024*1024)
 
-main()
+# Calculate the power spectral density (PSD) in dBm
+psd = 10*np.log10(np.abs(np.fft.fft(samples))**2/len(samples)*50)+30
 
-sdr.sample_rate = 2.4e6
-#sdr.freq_correction = 60
-sdr.gain = 'auto'
+# Create the frequency axis for the plot
+freq_axis = np.fft.fftfreq(len(samples), 1/sample_rate)
 
-for i in range(start_freq,stop_freq,2):
-    sdr.center_freq = i*center_freqin
-    samples = sdr.read_samples(256*1024)
-    plt.psd(samples, NFFT=1024, Fs=sdr.sample_rate/1e6, Fc=sdr.center_freq/1e6)
-
-sdr.close()
-
-plt.xlabel('Freq')
-plt.ylabel('dB')
+# Plot the spectrum
+plt.plot(freq_axis/1e6, psd)
+plt.xlabel('Frequency (MHz)')
+plt.ylabel('Power Spectral Density (dBm)')
 plt.show()
+
+# Close the RTL SDR object
+sdr.close()
