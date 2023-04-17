@@ -1,37 +1,28 @@
 from rtlsdr import RtlSdr
-import numpy as np
 import matplotlib.pyplot as plt
-import time
+import numpy as np
 
 sdr = RtlSdr()
 
 sdr.sample_rate = 2.4e6
 sdr.freq_correction = 60
-sdr.gain = 1
+sdr.gain = 'auto'
 
-Fs = 2.4e6 # sample rate
-Ts = 1/Fs # sample period
-N = 256*1024 # number of samples 
-
-# create the figure and axis for the plot
+plt.ion()  # Turn on interactive mode
 fig, ax = plt.subplots()
-ax.set_xlabel("Frequency [Hz]")
-ax.set_ylabel("Magnitude [dB]")
-ax.set_xlim(-Fs/2, Fs/2)
-ax.set_ylim(-60, 60)
-ax.grid(True)
+lines = ax.plot([], [])
+ax.set_xlabel('Freq')
+ax.set_ylabel('dB')
+ax.set_title('Spectrum')
 
 while True:
-    samples = sdr.read_samples(256*1024)
+    for i in range(90, 110, 2):
+        sdr.center_freq = i*1e6
+        samples = sdr.read_samples(256*1024)
+        freqs, psd = plt.psd(samples, NFFT=1024, Fs=sdr.sample_rate/1e6, Fc=sdr.center_freq/1e6)
+        lines[0].set_data(freqs, psd)
+        ax.relim()
+        ax.autoscale_view()
+        fig.canvas.draw()
+        fig.canvas.flush_events()
 
-    f = np.arange(-Fs/2, Fs/2, Fs/N) # start, stop, step
-
-    # update the data for the plot
-    ax.clear()
-    ax.plot(f, plt.psd(samples, NFFT=1024, Fs=sdr.sample_rate/1e6, Fc=sdr.center_freq/1e6))
-    ax.set_xlabel("Frequency [Hz]")
-    ax.set_ylabel("Magnitude [dB]")
-    ax.set_xlim(-Fs/2, Fs/2)
-    ax.set_ylim(-60, 60)
-    ax.grid(True)
-    plt.pause(0.1) # pause for 1 second to show the plot
