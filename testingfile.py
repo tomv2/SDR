@@ -4,7 +4,16 @@ from scipy.signal import welch, firwin, resample_poly
 
 # Load the samples from file
 sample_rate = 2.4e6
-x = np.fromfile('samples.dat', dtype=np.complex64)
+# Replace 'frequency' with the desired frequency in Hz
+freq = 4000000
+sdr = RtlSdr()
+sdr.sample_rate = 2.4e6
+sdr.center_freq = freq
+sdr.gain = 1
+
+# Collect samples
+samples = sdr.read_samples(256*1024)
+
 
 # Quadrature demodulation
 f_c = 100e6  # carrier frequency
