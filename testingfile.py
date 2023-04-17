@@ -28,7 +28,7 @@ sdr.sample_rate /= 10
 
 # Resample to 19kHz
 samples = signal.resample_poly(samples, 19*sdr.sample_rate, sdr.sample_rate)
-sdr.sample_rate = 19e3
+sdr.sample_rate = 19*sdr.sample_rate
 
 # Perform quadrature demodulation
 I = np.real(samples)
