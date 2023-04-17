@@ -16,20 +16,18 @@ sdr.center_freq = center_freq
 sdr.gain = gain
 
 # Read samples from the RTL SDR module
-samples = sdr.read_samples(1024*1024)
+samples = sdr.read_samples(1024)
 
-# Calculate the power spectral density (PSD) in dBm
-psd = 10*np.log10(np.abs(np.fft.fft(samples))**2/len(samples)*50)+30
+# Calculate the power spectral density (PSD)
+psd = np.abs(np.fft.fft(samples))**2/len(samples)
 
 # Create the frequency axis for the plot
-freq_axis = np.fft.fftshift(np.fft.fftfreq(len(samples), 1/sample_rate))/1e6
-freq_axis = freq_axis[np.argsort(freq_axis)]
+freq_axis = np.fft.fftfreq(len(samples), 1/sample_rate)/1e6
 
 # Plot the spectrum
 plt.plot(freq_axis, psd)
 plt.xlabel('Frequency (MHz)')
-plt.ylabel('Power Spectral Density (dBm)')
-plt.ticklabel_format(style='plain')
+plt.ylabel('Power Spectral Density')
 plt.show()
 
 # Close the RTL SDR object
