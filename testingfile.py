@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Define the RTL SDR module settings
-center_freq = 100e6    # Hz
+center_freq = 400e6    # Hz
 sample_rate = 2.4e6    # Hz
 gain = 1              # dB
 
