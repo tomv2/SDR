@@ -28,7 +28,7 @@ while True:
     PSD_shifted = np.fft.fftshift(PSD_log)
     print(PSD_shifted)
 
-    f = np.arange(-Fs/2, Fs/2, Fs/N) # start, stop, step
+    f = np.linspace(center_freq - Fs/2, center_freq + Fs/2, N, endpoint=False) - center_freq
 
     # update the data for the plot
     ax.clear()
