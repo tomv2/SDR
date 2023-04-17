@@ -3,9 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Define the RTL SDR module settings
-center_freq = 500e6    # Hz
+center_freq = 100e6    # Hz
 sample_rate = 2.4e6    # Hz
-gain = 1              # dB
+gain = 40              # dB
 
 # Create the RTL SDR object
 sdr = rtlsdr.RtlSdr()
@@ -22,12 +22,13 @@ samples = sdr.read_samples(1024*1024)
 psd = 10*np.log10(np.abs(np.fft.fft(samples))**2/len(samples)*50)+30
 
 # Create the frequency axis for the plot
-freq_axis = np.fft.fftfreq(len(samples), 1/sample_rate)
+freq_axis = np.fft.fftfreq(len(samples), 1/sample_rate)/1e6
 
 # Plot the spectrum
-plt.plot(freq_axis/1e6, psd)
+plt.plot(freq_axis, psd)
 plt.xlabel('Frequency (MHz)')
 plt.ylabel('Power Spectral Density (dBm)')
+plt.ticklabel_format(style='plain')
 plt.show()
 
 # Close the RTL SDR object
