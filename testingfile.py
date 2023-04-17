@@ -1,56 +1,54 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.signal import welch, firwin, resample_poly
+from scipy import signal
+from rtlsdr import RtlSdr
 
-# Load the samples from file
-sample_rate = 2.4e6
-# Replace 'frequency' with the desired frequency in Hz
-freq = 4000000
+# Set RTL-SDR parameters
+freq = 100e6
 sdr = RtlSdr()
 sdr.sample_rate = 2.4e6
 sdr.center_freq = freq
-sdr.gain = 1
+sdr.gain = 20
 
 # Collect samples
 samples = sdr.read_samples(256*1024)
 
+# Freq shift
+N = len(samples)
+f_o = -57e3 # amount we need to shift by
+t = np.arange(N)/sdr.sample_rate # time vector
+samples = samples * np.exp(2j*np.pi*f_o*t) # down shift
 
-# Quadrature demodulation
-f_c = 100e6  # carrier frequency
-t = np.arange(len(x)) / sample_rate
-x_demod = x * np.exp(-2j * np.pi * f_c * t)
+# Low-Pass Filter
+taps = signal.firwin(numtaps=101, cutoff=7500, fs=sdr.sample_rate)
+samples = np.convolve(samples, taps, 'valid')
 
-# Low-pass filter
-taps = firwin(numtaps=101, cutoff=7.5e3, fs=sample_rate)
-x_filtered = np.convolve(x_demod, taps, 'valid')
+# Decimate by 10, now that we filtered and there won't be aliasing
+samples = samples[::10]
+sdr.sample_rate /= 10
 
-# Decimate by 10
-x_decimated = x_filtered[::10]
-sample_rate = sample_rate / 10
+# Resample to 19kHz
+samples = signal.resample_poly(samples, 19*sdr.sample_rate, sdr.sample_rate)
+sdr.sample_rate = 19e3
 
-# Gardner timing recovery
-T = 4  # symbol period
-mu = 0.5  # gain factor
-error = np.zeros_like(x_decimated)
-mu_vec = np.zeros_like(x_decimated)
-for i in range(2, len(x_decimated)):
-    error[i] = np.imag(np.conj(x_decimated[i]) * x_decimated[i-2])
-    mu_vec[i] = mu_vec[i-1] + mu * error[i] * np.abs(error[i-1] - error[i+1])
-    x_decimated[i] = np.interp(i - mu_vec[i], np.arange(len(x_decimated)), x_decimated)
+# Perform quadrature demodulation
+I = np.real(samples)
+Q = np.imag(samples)
+samples = I[:-1]*Q[1:] - I[1:]*Q[:-1]
 
-# Resample to 19 kHz
-x_resampled = resample_poly(x_decimated, 19, int(sample_rate))
-sample_rate = 19e3
+# Perform symbol synchronization
+samples = samples[1500:-1500]
+samples = samples-np.mean(samples)
+samples = np.sign(samples)
 
-# Compute the power spectral density
-f, psd = welch(x_resampled, fs=sample_rate, nperseg=1024)
+# Calculate spectrum
+f, Pxx = signal.welch(x=samples, fs=sdr.sample_rate, nperseg=1024)
 
-# Convert to dBm
-psd_dbm = 10 * np.log10(psd) + 30
+# Convert power to dBm
+Pxx = 10*np.log10(Pxx/1e-3)
 
-# Plot the spectrum
-plt.figure()
-plt.plot(f, psd_dbm)
-plt.xlabel('Frequency (Hz)')
+# Plot spectrum
+import matplotlib.pyplot as plt
+plt.plot(f/1e6, Pxx)
+plt.xlabel('Frequency (MHz)')
 plt.ylabel('Power Spectral Density (dBm/Hz)')
 plt.show()
