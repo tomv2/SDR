@@ -7,7 +7,6 @@ from matplotlib.widgets import TextBox
 # configure SDR
 sdr = RtlSdr()
 sdr.sample_rate = 2.4e6
-sdr.center_freq = 140e6
 sdr.gain = 'auto'
 
 Fs = sdr.sample_rate
@@ -22,6 +21,8 @@ ax.set_ylabel("Magnitude [dB]")
 
 ax.grid(True)
 def submit(text):
+   
+    sdr.center_freq = float(text)
 
     while True:
         samples = sdr.read_samples(N)
@@ -47,3 +48,4 @@ txbox = fig.add_axes([0.3, 0.02, 0.5, 0.07])
 text_box = TextBox(txbox, 'Enter Center Frequency', initial='')
 text_box.on_submit(submit)
 plt.show()
+
