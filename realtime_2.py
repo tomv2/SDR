@@ -2,75 +2,84 @@ import numpy as np
 import matplotlib.pyplot as plt
 import rtlsdr
 import threading
-import queue
 import usb.core
 import usb.util
 
-class SDR:
-    def __init__(self, center_frequency, sample_rate):
+
+class SDRThread(threading.Thread):
+    def __init__(self, sdr, Fs, N, center_frequency):
+        threading.Thread.__init__(self)
+        self.sdr = sdr
+        self.Fs = Fs
+        self.Ts = 1/Fs
+        self.N = N
         self.center_frequency = center_frequency
-        self.sample_rate = sample_rate
-        self.sdr = rtlsdr.RtlSdr()
+        self.running = True
+        self.daemon = True
 
-        self.sdr.sample_rate = self.sample_rate
-        self.sdr.center_frequency = self.center_frequency
-
-    def get_samples(self, N):
-        try:
-            samples = self.sdr.read_samples(N)
-            return samples
-        except usb.core.USBError:
-            usb.util.dispose_resources(self.sdr.dev)
-            self.sdr = rtlsdr.RtlSdr()
-            self.sdr.sample_rate = self.sample_rate
-            self.sdr.center_frequency = self.center_frequency
-            return None
-
-class Plotter:
-    def __init__(self, queue):
-        self.queue = queue
-        self.fig, self.ax = plt.subplots()
-        self.ax.set_xlabel("Frequency Hz")
-        self.ax.set_ylabel("Power dB")
-        self.ax.grid(True)
-
-    def start(self):
-        self.thread = threading.Thread(target=self._plot_thread)
-        self.thread.daemon = True
-        self.thread.start()
-
-    def _plot_thread(self):
-        while True:
+    def run(self):
+        while self.running:
             try:
-                samples, freq_axis = self.queue.get()
-                PSD = np.abs(np.fft.fft(samples))**2 / (len(samples)*Fs)
-                PSD_log = 10*np.log10(PSD)
-                PSD_shifted = np.fft.fftshift(PSD_log)
-                f = freq_axis/1e6
+                samples = self.sdr.read_samples(self.N)
+            except usb.core.USBError:
+                # USB error occurred, try to re-attach the device
+                self.sdr.close()
+                self.sdr = rtlsdr.RtlSdr()
+                self.sdr.sample_rate = self.Fs
+                self.sdr.center_frequency = self.center_frequency
+                continue
 
-                self.ax.clear()
-                self.ax.plot(f, PSD_shifted)
-                plt.pause(0.01)
+            PSD = np.abs(np.fft.fft(samples))**2 / (self.N*self.Fs)
+            PSD_log = 10*np.log10(PSD)
+            PSD_shifted = np.fft.fftshift(PSD_log)
 
-            except Exception as e:
-                print(e)
-
-if __name__ == '__main__':
-    Fs = 3.2e6
-    Ts = 1/Fs
-    N = 256 * 1024
-    center_frequency = 100e6
-
-    sdr = SDR(center_frequency, Fs)
-    plot_queue = queue.Queue()
-    plot = Plotter(plot_queue)
-    plot.start()
-
-    while True:
-        samples = sdr.get_samples(N)
-        if samples is not None:
-            freq_axis = np.fft.fftfreq(len(samples), Ts)
+            freq_axis = np.fft.fftfreq(len(samples), 1/self.Fs)
             freq_axis = np.fft.fftshift(freq_axis)
-            freq_axis = freq_axis + center_frequency
+            freq_axis = freq_axis + self.center_frequency
+            f = freq_axis/1e6
 
-            plot_queue.put((samples, freq_axis))
+            plt.clf()
+            plt.plot(f, PSD_shifted)
+            plt.xlabel("Frequency Hz")
+            plt.ylabel("Power dB")
+            plt.grid(True)
+            plt.pause(0.001)
+
+        self.sdr.close()
+
+    def stop(self):
+        self.running = False
+
+
+sdr = rtlsdr.RtlSdr()
+
+Fs = 3.2e6
+Ts = 1/Fs
+N = 256*1024
+center_frequency = 100e6
+
+sdr.sample_rate = Fs
+sdr.center_frequency = center_frequency
+
+# Call set_wakeup_fd in the main thread
+plt.ion()
+plt.plot([0], [0])
+plt.show(block=False)
+plt.pause(0.001)
+mgr = plt.get_current_fig_manager()
+mgr.window.showMaximized()
+usb.util.dispose_resources()
+usb.util.release_interface(sdr.dev, sdr.interface)
+usb.util.dispose_resources(sdr.dev)
+usb.util.claim_interface(sdr.dev, sdr.interface)
+usb.util.dispose_resources(sdr.dev)
+usb.util.claim_interface(sdr.dev, sdr.interface)
+plt.draw()
+plt.pause(0.001)
+
+sdr_thread = SDRThread(sdr, Fs, N, center_frequency)
+sdr_thread.start()
+
+input("Press Enter to stop...")
+sdr_thread.stop()
+sdr_thread.join()
