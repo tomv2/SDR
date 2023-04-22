@@ -1,85 +1,62 @@
+import threading
 import numpy as np
 import matplotlib.pyplot as plt
 import rtlsdr
-import threading
-import usb.core
-import usb.util
 
+class RealtimePlot:
+    def __init__(self):
+        self.sdr = rtlsdr.RtlSdr()
+        self.sdr.sample_rate = 2.4e6
+        self.sdr.center_freq = 100e6
+        self.sdr.gain = 'auto'
 
-class SDRThread(threading.Thread):
-    def __init__(self, sdr, Fs, N, center_frequency):
-        threading.Thread.__init__(self)
-        self.sdr = sdr
-        self.Fs = Fs
-        self.Ts = 1/Fs
-        self.N = N
-        self.center_frequency = center_frequency
-        self.running = True
-        self.daemon = True
+        self.fig, self.ax = plt.subplots()
+        self.ax.set_xlabel('Frequency (MHz)')
+        self.ax.set_ylabel('Power (dB)')
+        self.ax.set_ylim(-100, 0)
+        self.ax.set_xlim(80, 120)
+        self.line, = self.ax.plot([], [])
 
-    def run(self):
-        while self.running:
+        self.stopped = False
+        self.thread = threading.Thread(target=self.update, args=())
+        self.thread.daemon = True
+
+    def start(self):
+        self.sdr.read_samples_async(self.update_plot, int(2.4e6/8))
+        self.thread.start()
+
+    def update_plot(self, samples, *args):
+        PSD = np.abs(np.fft.fft(samples))**2 / len(samples)
+        PSD_log = 10*np.log10(PSD)
+        PSD_shifted = np.fft.fftshift(PSD_log)
+        freq_axis = np.fft.fftfreq(len(samples), 1/self.sdr.sample_rate)
+        freq_axis = np.fft.fftshift(freq_axis)
+        freq_axis = freq_axis + self.sdr.center_freq
+        f = freq_axis/1e6
+
+        self.line.set_xdata(f)
+        self.line.set_ydata(PSD_shifted)
+        self.ax.relim()
+        self.ax.autoscale_view()
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
+
+    def update(self):
+        while not self.stopped:
             try:
-                samples = self.sdr.read_samples(self.N)
+                self.sdr.read_samples_async(self.update_plot, int(2.4e6/8))
             except usb.core.USBError:
-                # USB error occurred, try to re-attach the device
-                self.sdr.close()
-                self.sdr = rtlsdr.RtlSdr()
-                self.sdr.sample_rate = self.Fs
-                self.sdr.center_frequency = self.center_frequency
-                continue
-
-            PSD = np.abs(np.fft.fft(samples))**2 / (self.N*self.Fs)
-            PSD_log = 10*np.log10(PSD)
-            PSD_shifted = np.fft.fftshift(PSD_log)
-
-            freq_axis = np.fft.fftfreq(len(samples), 1/self.Fs)
-            freq_axis = np.fft.fftshift(freq_axis)
-            freq_axis = freq_axis + self.center_frequency
-            f = freq_axis/1e6
-
-            plt.clf()
-            plt.plot(f, PSD_shifted)
-            plt.xlabel("Frequency Hz")
-            plt.ylabel("Power dB")
-            plt.grid(True)
-            plt.pause(0.001)
-
-        self.sdr.close()
+                print("USB Error")
 
     def stop(self):
-        self.running = False
+        self.stopped = True
+        self.thread.join()
+        self.sdr.cancel_read_async()
+        self.sdr.close()
+        rtlsdr.libusb_exit(None)
 
-
-sdr = rtlsdr.RtlSdr()
-
-Fs = 3.2e6
-Ts = 1/Fs
-N = 256*1024
-center_frequency = 100e6
-
-sdr.sample_rate = Fs
-sdr.center_frequency = center_frequency
-
-# Call set_wakeup_fd in the main thread
-plt.ion()
-plt.plot([0], [0])
-plt.show(block=False)
-plt.pause(0.001)
-mgr = plt.get_current_fig_manager()
-mgr.window.showMaximized()
-usb.util.dispose_resources()
-usb.util.release_interface(sdr.dev, sdr.interface)
-usb.util.dispose_resources(sdr.dev)
-usb.util.claim_interface(sdr.dev, sdr.interface)
-usb.util.dispose_resources(sdr.dev)
-usb.util.claim_interface(sdr.dev, sdr.interface)
-plt.draw()
-plt.pause(0.001)
-
-sdr_thread = SDRThread(sdr, Fs, N, center_frequency)
-sdr_thread.start()
-
-input("Press Enter to stop...")
-sdr_thread.stop()
-sdr_thread.join()
+if __name__ == '__main__':
+    rp = RealtimePlot()
+    rp.start()
+    input("Press Enter to stop...")
+    rp.stop()
