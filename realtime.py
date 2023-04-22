@@ -1,59 +1,48 @@
-from flask import Flask, render_template, Response
 import numpy as np
 import matplotlib.pyplot as plt
-import rtlsdr
-import time
+import pyrtlsdr
 
-app = Flask(__name__)
+sdr = pyrtlsdr.RtlSdr()
 
-sdr = rtlsdr.RtlSdr()
+# Set the sample rate, center frequency, and gain
+sdr.sample_rate = 3.2e6
+sdr.center_freq = 100e6
+sdr.gain = 'auto'
 
-Fs = 3.2e6
-Ts = 1/Fs
-N= 256*1024
-center_frequency = 100e6
+# Create a figure for the real-time plot
+fig, ax = plt.subplots()
 
-sdr.sample_rate = Fs
-sdr.center_frequency = center_frequency
+# Create an empty line object for the plot
+line, = ax.plot([], [])
 
-def generate_plot():
-    while True:
-        samples = sdr.read_samples(N)
-        PSD = np.abs(np.fft.fft(samples))**2 / (N*Fs)
-        PSD_log = 10*np.log10(PSD)
-        PSD_shifted = np.fft.fftshift(PSD_log)
+# Set the plot limits and labels
+ax.set_xlim(sdr.center_freq/1e6 - 1, sdr.center_freq/1e6 + 1)
+ax.set_ylim(-120, 20)
+ax.set_xlabel('Frequency (MHz)')
+ax.set_ylabel('Power (dB)')
 
-        freq_axis = np.fft.fftfreq(len(samples), 1/Fs)
-        freq_axis = np.fft.fftshift(freq_axis)
-        freq_axis = freq_axis + center_frequency
-        f = freq_axis/1e6
+# Define a function to update the plot with new samples
+def update_plot(samples):
+    # Compute the power spectrum density
+    PSD = np.abs(np.fft.fft(samples))**2 / (len(samples)*sdr.sample_rate)
+    PSD_log = 10*np.log10(PSD)
+    PSD_shifted = np.fft.fftshift(PSD_log)
+    
+    # Compute the frequency axis
+    freq_axis = np.fft.fftfreq(len(samples), 1/sdr.sample_rate)
+    freq_axis = np.fft.fftshift(freq_axis)
+    freq_axis = freq_axis + sdr.center_freq
+    
+    # Update the plot with the new data
+    line.set_data(freq_axis/1e6, PSD_shifted)
+    ax.relim()
+    ax.autoscale_view()
+    fig.canvas.draw()
 
-        plt.clf() # Clear previous plot
-        plt.plot(f, PSD_shifted)
-        plt.xlabel("Frequency Hz")
-        plt.ylabel("Power dB")
-        plt.grid(True)
-        
-        # Convert the plot to a PNG image and return it as a response
-        # with a content type of image/png
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
-        yield (b'--frame\r\n'
-               b'Content-Type: image/png\r\n\r\n' + buf.getvalue() + b'\r\n')
-        buf.close()
+# Start the SDR device and the real-time plot
+sdr.read_samples_async(update_plot, num_samples=8192)
 
-        time.sleep(0.1) # Add a small delay to control update rate
+plt.show()
 
-@app.route('/')
-def index():
-    # Render the template that displays the plot
-    return render_template('index.html')
-
-@app.route('/plot.png')
-def plot_png():
-    # Return a response that streams the plot as a PNG image
-    return Response(generate_plot(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-if __name__ == '__main__':
-    app.run(debug=True)
+# Close the SDR device when the plot is closed
+sdr.close()
