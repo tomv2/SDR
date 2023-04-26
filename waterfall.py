@@ -1,7 +1,6 @@
 import numpy as np
-import matplotlib
-matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+import rtlsdr
 import threading
 
 # Set up the SDR device
@@ -10,10 +9,12 @@ sdr.sample_rate = 3.2e6
 sdr.center_freq = 100e6
 sdr.gain = 'auto'
 
-# Set up the real-time plot
+# Set up the waterfall plot
 fig, ax = plt.subplots()
-line = ax.imshow(np.zeros((512, 1024)), cmap='jet', aspect='auto', origin='lower',
-                 extent=[sdr.center_freq/1e6 - 1.6, sdr.center_freq/1e6 + 1.6, 0, 512*sdr.sample_rate/1e6])
+waterfall = np.zeros((1024, 1000))
+im = ax.imshow(waterfall, extent=[sdr.center_freq/1e6 - 1, sdr.center_freq/1e6 + 1, 0, 1024], aspect='auto', cmap='jet')
+ax.set_xlabel('Frequency (MHz)')
+ax.set_ylabel('Time')
 
 # Set up the circular buffer
 buffer_size = 1024
@@ -31,18 +32,17 @@ def read_samples():
 
 # Define a function to update the plot
 def update_plot():
+    global waterfall
     while True:
         with buffer_lock:
             samples = sample_buffer.copy()
-        PSD = np.abs(np.fft.fft(samples))**2 / (len(samples)*sdr.sample_rate)
-        PSD_log = 10*np.log10(PSD)
-        PSD_shifted = np.fft.fftshift(PSD_log)
-        freq_axis = np.fft.fftfreq(len(samples), 1/sdr.sample_rate)
-        freq_axis = np.fft.fftshift(freq_axis)
-        freq_axis = freq_axis + sdr.center_freq
-        line.set_data(freq_axis/1e6, np.abs(PSD_shifted).reshape((512, -1)))
-        plt.draw()
-        plt.pause(0.001)
+            PSD = np.abs(np.fft.fft(samples))**2 / (len(samples)*sdr.sample_rate)
+            PSD_log = 10*np.log10(PSD)
+            PSD_shifted = np.fft.fftshift(PSD_log)
+            waterfall[:-1] = waterfall[1:]
+            waterfall[-1] = PSD_shifted
+            im.set_data(waterfall)
+            fig.canvas.draw()
 
 # Start the SDR device and the real-time plot
 t1 = threading.Thread(target=read_samples)
