@@ -9,13 +9,6 @@ sdr.sample_rate = 3.2e6
 sdr.center_freq = 100e6
 sdr.gain = 'auto'
 
-# Set up the waterfall plot
-waterfall = np.zeros((1024, 512))
-fig, ax = plt.subplots()
-im = ax.imshow(waterfall, aspect='auto', extent=[sdr.center_freq/1e6-1, sdr.center_freq/1e6+1, 0, 1024*sdr.sample_rate/1e6], cmap='jet')
-ax.set_xlabel('Frequency (MHz)')
-ax.set_ylabel('Time (ms)')
-
 # Set up the circular buffer
 buffer_size = 1024
 sample_buffer = np.zeros(buffer_size, dtype=np.complex64)
@@ -30,28 +23,47 @@ def read_samples():
             sample_buffer[:-buffer_size] = sample_buffer[buffer_size:]
             sample_buffer[-buffer_size:] = samples
 
-# Define a function to update the waterfall plot
+# Define a function to update the plot
 def update_plot():
-    global waterfall
+    fig, ax = plt.subplots()
+    plt.ion()
+    fig.show()
+    fig.canvas.draw()
+    
+    PSD_log_all = []
+    freq_axis = None
     while True:
         with buffer_lock:
             samples = sample_buffer.copy()
         PSD = np.abs(np.fft.fft(samples))**2 / (len(samples)*sdr.sample_rate)
         PSD_log = 10*np.log10(PSD)
-        PSD_shifted = np.fft.fftshift(PSD_log)
-        freq_axis = np.fft.fftfreq(len(samples), 1/sdr.sample_rate)
-        freq_axis = np.fft.fftshift(freq_axis)
-        freq_axis = freq_axis + sdr.center_freq
-        waterfall[:-1,:] = waterfall[1:,:]
-        waterfall[-1,:] = PSD_shifted
-        im.set_data(waterfall)
-        fig.canvas.draw()
+        PSD_log_all.append(PSD_log)
+        
+        # Update the frequency axis once
+        if freq_axis is None:
+            freq_axis = np.fft.fftfreq(len(samples), 1/sdr.sample_rate)
+            freq_axis = np.fft.fftshift(freq_axis)
+            freq_axis = freq_axis + sdr.center_freq
+            freq_axis = np.resize(freq_axis, (len(samples)//buffer_size, buffer_size))
+            freq_axis = np.fft.fftshift(freq_axis, axes=1)
+            extent = [freq_axis.min()/1e6, freq_axis.max()/1e6, 0, len(PSD_log_all)]
 
-# Start the SDR device and the waterfall plot
-t1 = threading.Thread(target=read_samples)
-t2 = threading.Thread(target=update_plot)
-t1.start()
-t2.start()
+        PSD_log_all_resized = np.array(PSD_log_all)
+        if PSD_log_all_resized.shape[0] > len(samples)//buffer_size:
+            PSD_log_all_resized = PSD_log_all_resized[-(len(samples)//buffer_size):, :]
+
+        ax.imshow(PSD_log_all_resized.T, origin='lower', aspect='auto', cmap='jet', extent=extent)
+        ax.set_xlabel('Frequency (MHz)')
+        ax.set_ylabel('FFT Window')
+        fig.canvas.draw()
+        fig.canvas.flush_events()
+
+# Start the SDR device and the real-time plot
+sdr_thread = threading.Thread(target=read_samples)
+sdr_thread.start()
+
+plot_thread = threading.Thread(target=update_plot)
+plot_thread.start()
 
 plt.show()
 
