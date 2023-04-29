@@ -38,8 +38,6 @@ def submit(text):
         ax.plot(f, PSD_shifted)
         ax.set_xlabel("Frequency [Hz]")
         ax.set_ylabel("Magnitude [dB]")
-        # ax.set_xlim(-Fs/2, Fs/2)
-        # ax.set_ylim(-60, 60)
         ax.grid(True)
         plt.pause(0.01) # pause briefly to show the plot
     sdr.close()
