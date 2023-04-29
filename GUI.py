@@ -33,7 +33,6 @@ def submit(text):
 
         f = np.linspace(-Fs/2, Fs/2, N, endpoint=False) + sdr.center_freq
 
-        # update the data for the plot
         ax.clear()
         ax.plot(f, PSD_shifted)
         ax.set_xlabel("Frequency [Hz]")
