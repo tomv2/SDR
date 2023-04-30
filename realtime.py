@@ -1,15 +1,13 @@
+import rtlsdr
 import numpy as np
 import matplotlib.pyplot as plt
-import rtlsdr
 import threading
 
-# Set up the SDR device
 sdr = rtlsdr.RtlSdr()
-sdr.sample_rate = 3.2e6
+sdr.sample_rate = 2.4e6
 sdr.center_freq = 100e6
-sdr.gain = 'auto'
+sdr.gain = 1
 
-# Set up the real-time plot
 fig, ax = plt.subplots()
 line, = ax.plot([], [])
 ax.set_xlim(sdr.center_freq/1e6 - 1, sdr.center_freq/1e6 + 1)
@@ -17,12 +15,10 @@ ax.set_ylim(-120, 20)
 ax.set_xlabel('Frequency (MHz)')
 ax.set_ylabel('Power (dB)')
 
-# Set up the circular buffer
 buffer_size = 1024
 sample_buffer = np.zeros(buffer_size, dtype=np.complex64)
 buffer_lock = threading.Lock()
 
-# Define a function to read samples from the SDR device and update the buffer
 def read_samples():
     global sample_buffer
     while True:
@@ -31,7 +27,6 @@ def read_samples():
             sample_buffer[:-buffer_size] = sample_buffer[buffer_size:]
             sample_buffer[-buffer_size:] = samples
 
-# Define a function to update the plot
 def update_plot():
     while True:
         with buffer_lock:
@@ -47,7 +42,6 @@ def update_plot():
         ax.autoscale_view()
         fig.canvas.draw()
 
-# Start the SDR device and the real-time plot
 t1 = threading.Thread(target=read_samples)
 t2 = threading.Thread(target=update_plot)
 t1.start()
@@ -55,5 +49,4 @@ t2.start()
 
 plt.show()
 
-# Close the SDR device when the plot is closed
 sdr.close()
